@@ -1,0 +1,76 @@
+---
+default_language_version: {python: python3}
+minimum_pre_commit_version: "1.15"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+        name: Check for valid YAML syntax in repo
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/check_yaml.py
+      - id: detect-private-key
+        name: Check for existence of private key in repo
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/detect_private_key.py
+      - id: trailing-whitespace
+        name: Remove trailing whitespace in YAML,Python,Bash files
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/trailing_whitespace_fixer.py
+        files: \.(py|sh|yaml|yml)$
+      - id: end-of-file-fixer
+        name: Ensure EOF is consistently only a newline
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/end_of_file_fixer.py
+        files: \.(py|sh|yaml|yml)$
+      - id: mixed-line-ending
+        name: Ensure line-ending is consistent
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/mixed_line_ending.py
+        files: \.(py|sh|yaml|yml)$
+      - id: check-executables-have-shebangs
+        name: Checks that non-binary executables have a proper shebang
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/check_executables_have_shebangs.py
+        files: \.(py|sh)$
+      - id: check-shebang-scripts-are-executable
+        name: Checks that scripts with shebangs are executable.
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/check_shebang_scripts_are_executable.py
+        files: \.(py|sh)$
+      - id: check-yaml
+        name: Attempts to load all yaml files to verify syntax.
+        description: https://github.com/pre-commit/pre-commit-hooks/blob/master/pre_commit_hooks/check_yaml.py
+        files: \.(yaml)$
+
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
+
+  - repo: https://github.com/psf/black
+    rev: 23.9.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/klen/pylama
+    rev: 8.4.1
+    hooks:
+      - id: pylama
+        args: ['-i', 'C901,E203,E501,E722']
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: ["-iii", "-lll", "-q"]
+
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.11.1
+    hooks:
+      - id: pyupgrade
+        args: ["--py311-plus"]
+
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: python-check-blanket-type-ignore
+      - id: python-check-mock-methods
+      - id: python-no-eval
+      - id: python-use-type-annotations
+      - id: text-unicode-replacement-char
+      - id: python-no-log-warn
