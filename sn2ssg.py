@@ -107,6 +107,15 @@ def _split_notes(input_lines: [str]) -> [[str]]:
     return output_notes
 
 
+def _delete_existing_title(note: [str]) -> [str]:
+    # delete title line of markdown note if it starts with "# "
+    # since the title will already be part of header, and we don't want to display it twice
+    if note[0].startswith("# "):
+        return note[1:]
+    else:
+        return note
+
+
 def _delete_existing_header(note: [str]) -> [str]:
     # trash "starting" header and "middle" header lines
     output_note = []
@@ -232,6 +241,7 @@ def main():
         new_header = _create_ssg_header(
             os.environ.get("SSG_TYPE"), title, subtitle, author, date, tags
         )
+        note = _delete_existing_title(note)
         note = _prepend_ssg_header(new_header, note)
         notes_output_counter = _write_note_file(
             note,
