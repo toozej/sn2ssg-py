@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import fnmatch
 import os
 import re
 import shutil
@@ -6,6 +7,8 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+
+import requests
 
 SN_HEADER_PATTERN = r"^\|\s*(.*?):\s*(.*?)\s*\|"
 IGNORED_TAGS = [os.environ.get("TAG_TO_DOWNLOAD"), "blog"]
@@ -190,14 +193,25 @@ def _write_note_file(
     return notes_output_counter + 1
 
 
-def _ensure_num_parsed_notes_matches_output_notes(
-    notes: [[str]], notes_output_counter: int
+def _ensure_num_parsed_notes_matches_outputted_notes(
+    notes: [[str]], notes_output_counter: int, start_counter: int, end_counter: int
 ) -> int:
-    if len(notes) != notes_output_counter:
-        print(
-            f"FATAL: The number of notes ({len(notes)}) does not match the number of outputted files ({notes_output_counter})"
-        )
+    if len(notes) != notes_output_counter or end_counter < start_counter:
+        title = "sn2ssg FATAL error"
+        message = f"FATAL: The number of notes ({len(notes)}) does not match the number of outputted files ({notes_output_counter})"
+        print(message)
+        _send_gotify_notification(title, message)
         sys.exit(1)
+    elif os.environ.get("DEBUG") == "True":
+        title = "sn2ssg successful"
+        message = (
+            f"DEBUG: Number of parsed vs outputted notes matches: {len(notes)} notes"
+        )
+        print(message)
+        _send_gotify_notification(title, message)
+    else:
+        message = f"Number of parsed vs outputted notes matches: {len(notes)} notes"
+        print(message)
 
 
 def _run_sncli(tag_to_download: str, input_filename: str):
@@ -219,12 +233,29 @@ def _run_sncli(tag_to_download: str, input_filename: str):
         print(f"Error: {e}")
 
 
+def _send_gotify_notification(notification_title: str, notification_text: str):
+    if os.environ.get("GOTIFY_URL") and os.environ.get("GOTIFY_TOKEN"):
+        url = f"{os.environ.get('GOTIFY_URL')}/message"
+    else:
+        print(
+            "Gotify URL and/or token not specified in environment. No notification was sent"
+        )
+        return
+    params = {"token": os.environ.get("GOTIFY_TOKEN")}
+    data = {"title": notification_title, "message": notification_text}
+    response = requests.post(url, params=params, data=data)
+    print(response.text)
+
+
 def main():
     try:
         os.mkdir(os.environ.get("INPUT_DIR"))
         os.mkdir(os.environ.get("OUTPUT_DIR"))
     except FileExistsError:
         print("Input / Output directories already exist")
+    output_dir_num_files_start = len(
+        fnmatch.filter(os.listdir(os.environ.get("OUTPUT_DIR")), "*.*")
+    )
     input_filename = f"{os.environ.get('INPUT_DIR')}/sn_dump.md"
     _run_sncli(os.environ.get("TAG_TO_DOWNLOAD"), input_filename)
     with open(input_filename) as input_file:
@@ -249,9 +280,19 @@ def main():
             _convert_title_to_filename(title),
             notes_output_counter,
         )
-    _ensure_num_parsed_notes_matches_output_notes(notes, notes_output_counter)
+    output_dir_num_files_end = len(
+        fnmatch.filter(os.listdir(os.environ.get("OUTPUT_DIR")), "*.*")
+    )
+    _ensure_num_parsed_notes_matches_outputted_notes(
+        notes,
+        notes_output_counter,
+        output_dir_num_files_start,
+        output_dir_num_files_end,
+    )
     os.remove(input_filename)
-    time.sleep(int(os.environ.get("POLLING_CYCLE", 3600)))
+    time_to_sleep = int(os.environ.get("POLLING_CYCLE", 3600))
+    print(f"sn2ssg ran successfully! Sleeping {time_to_sleep} before next cycle.")
+    time.sleep(time_to_sleep)
     return
 
 
