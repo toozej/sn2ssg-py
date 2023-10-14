@@ -1,4 +1,4 @@
-FROM python:slim as base
+FROM python:3.11-slim as base
 RUN pip install sncli==0.4.2 requests
 
 WORKDIR /app
