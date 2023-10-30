@@ -4,7 +4,7 @@ minimum_pre_commit_version: "1.15"
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.5.0
     hooks:
       - id: check-yaml
         name: Check for valid YAML syntax in repo
@@ -43,7 +43,7 @@ repos:
       - id: check-useless-excludes
 
   - repo: https://github.com/psf/black
-    rev: 23.9.1
+    rev: 23.10.1
     hooks:
       - id: black
 
@@ -60,7 +60,7 @@ repos:
         args: ["-iii", "-lll", "-q"]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.13.0
+    rev: v3.15.0
     hooks:
       - id: pyupgrade
         args: ["--py311-plus"]
