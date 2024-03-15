@@ -17,6 +17,11 @@ jobs:
         name: Checkout
         uses: actions/checkout@v4
       -
+        name: Setup required version of Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      -
         name: Run pre-commit
         run: |
           pip install pre-commit
@@ -29,9 +34,9 @@ jobs:
         include:
           - context: .
             tags: |
-              toozej/sn2ssg:latest
-              ghcr.io/toozej/sn2ssg:latest
-              quay.io/toozej/sn2ssg:latest
+              toozej/sn2ssg-py:latest
+              ghcr.io/toozej/sn2ssg-py:latest
+              quay.io/toozej/sn2ssg-py:latest
     steps:
       -
         name: Checkout

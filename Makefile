@@ -8,7 +8,7 @@ MAKEFLAGS += --no-builtin-rules
 .DEFAULT_GOAL := help
 
 # Set variables used across the project
-IMAGE_NAME = toozej/sn2ssg
+IMAGE_NAME = toozej/sn2ssg-py
 IMAGE_TAG = latest
 
 OS = $(shell uname -s)
@@ -26,8 +26,8 @@ build: ## Build Docker image
 	DOCKER_BUILDKIT=0 docker build -f $(CURDIR)/Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
 
 run: ## Run built Docker image
-	-docker kill sn2ssg
-	docker run --rm --env-file .env --name sn2ssg -v $(CURDIR)/out:/out $(IMAGE_NAME):$(IMAGE_TAG)
+	-docker kill sn2ssg-py
+	docker run --rm --env-file .env --name sn2ssg-py -v $(CURDIR)/out:/out $(IMAGE_NAME):$(IMAGE_TAG)
 
 update-requirements: ## Update Python requirements
 	@input_line=$$(grep "pip install" $(CURDIR)/Dockerfile); \
@@ -52,8 +52,8 @@ pre-commit-run: ## Run pre-commit hooks against all files
 	pre-commit run --all-files
 
 clean: ## Clean up generated files and built Docker images
-	docker image rm $(IMAGE_NAME):$(IMAGE_TAG)
-	rm -f ./out/*
+	-docker image rm $(IMAGE_NAME):$(IMAGE_TAG)
+	rm -f $(CURDIR)/in/* $(CURDIR)/out/*
 
 help: ## Display help text
 	@grep -E '^[a-zA-Z_-]+ ?:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

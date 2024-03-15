@@ -1,16 +1,16 @@
-# sn2ssg
-Convert Simplenote notes to SSG-formatted Markdown files
+# sn2ssg-py
+Convert Simplenote notes to SSG-formatted Markdown files with Python
 This can provide a portion of a fully-automated Simplenote note -> SSG-generated website or blogging pipeline
 
 ## Usage
 ### Convert specifically-tagged Simplenote notes to SSG-formatted Markdown
-This is the primary use-case of sn2ssg, and can either be done via `make` or as part of a docker-compose project (see [docker-compose example](./docker-compose.yml))
-1. build sn2ssg Docker image
+This is the primary use-case of sn2ssg-py, and can either be done via `make` or as part of a docker-compose project (see [docker-compose example](./docker-compose.yml))
+1. build sn2ssg-py Docker image
     - `make build`
 2. set sn2ssg environment variables
     - `cp .env.sample .env`
     - edit `.env` with correct values for your setup
-3. run sn2ssg Docker image
+3. run sn2ssg-py Docker image
     - `make run`
 
 ### Output all notes with a specified tag to terminal
