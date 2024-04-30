@@ -54,7 +54,11 @@ repos:
         args: ['-i', 'C901,E203,E501,E722']
 
   - repo: https://github.com/PyCQA/bandit
+<<<<<<< Updated upstream
     rev: 1.7.8
+=======
+    rev: 1.7.7
+>>>>>>> Stashed changes
     hooks:
       - id: bandit
         args: ["-iii", "-lll", "-q"]
