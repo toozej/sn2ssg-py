@@ -11,6 +11,25 @@ MAKEFLAGS += --no-builtin-rules
 IMAGE_NAME = toozej/sn2ssg-py
 IMAGE_TAG = latest
 
+# Build info
+BUILDER = $(shell whoami)@$(shell hostname)
+NOW = $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Version control
+VERSION = $(shell git describe --tags --dirty --always)
+COMMIT = $(shell git rev-parse --short HEAD)
+BRANCH = $(shell git rev-parse --abbrev-ref HEAD)
+
+# Linker flags
+PKG = $(shell head -n 1 go.mod | cut -c 8-)
+VER = $(PKG)/pkg/version
+LDFLAGS = -s -w \
+	-X $(VER).Version=$(or $(VERSION),unknown) \
+	-X $(VER).Commit=$(or $(COMMIT),unknown) \
+	-X $(VER).Branch=$(or $(BRANCH),unknown) \
+	-X $(VER).BuiltAt=$(NOW) \
+	-X $(VER).Builder=$(BUILDER)
+	
 OS = $(shell uname -s)
 ifeq ($(OS), Linux)
 	OPENER=xdg-open
@@ -18,7 +37,7 @@ else
 	OPENER=open
 endif
 
-.PHONY: all build run update-requirements pre-commit pre-commit-install pre-commit-run clean help
+.PHONY: all build run build-go run-go update-requirements pre-commit pre-commit-install pre-commit-run clean help
 
 all: build run ## Run default workflow
 
@@ -28,6 +47,17 @@ build: ## Build Docker image
 run: ## Run built Docker image
 	-docker kill sn2ssg-py
 	docker run --rm --env-file .env --name sn2ssg-py -v $(CURDIR)/out:/out $(IMAGE_NAME):$(IMAGE_TAG)
+
+build-go: ## Build Golang application
+	CGO_ENABLED=0 go build -o $(CURDIR)/sn2ssg -ldflags="$(LDFLAGS)" $(CURDIR)/
+
+run-go: ## Run built Golang application
+	if test -e $(CURDIR)/.env; then \
+		export `cat $(CURDIR)/.env | xargs`; \
+		$(CURDIR)/sn2ssg; \
+	else \
+		echo "No env vars found, need to add them to ./.env. See README.md for more info"; \
+	fi
 
 update-requirements: ## Update Python requirements
 	@input_line=$$(grep "pip install" $(CURDIR)/Dockerfile); \
