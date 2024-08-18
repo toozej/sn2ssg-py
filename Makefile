@@ -18,12 +18,27 @@ else
 	OPENER=open
 endif
 
-.PHONY: all build run update-requirements pre-commit pre-commit-install pre-commit-run clean help
+.PHONY: all build test run update-requirements pre-commit pre-commit-install pre-commit-run clean help
 
-all: build run ## Run default workflow
+all: build test run ## Run default workflow
 
 build: ## Build Docker image
-	DOCKER_BUILDKIT=0 docker build -f $(CURDIR)/Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	docker build -f $(CURDIR)/Dockerfile -t $(IMAGE_NAME):$(IMAGE_TAG) .
+
+test: ## Run tests locally
+	if test -e $(CURDIR)/.venv/bin/activate; then \
+		source $(CURDIR)/.venv/bin/activate; \
+	else \
+		python3 -m venv $(CURDIR)/.venv; \
+		source $(CURDIR)/.venv/bin/activate; \
+		pip3 install -r $(CURDIR)/requirements.txt; \
+	fi
+	if test -e $(CURDIR)/.env; then \
+		export `cat $(CURDIR)/.env | xargs`; \
+	else \
+		echo "No env vars found, need to add them to ./.env. See README.md for more info"; \
+	fi; \
+	pytest -vv $(CURDIR)/test_sn2ssg.py
 
 run: ## Run built Docker image
 	-docker kill sn2ssg-py

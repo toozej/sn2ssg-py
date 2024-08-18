@@ -26,6 +26,11 @@ jobs:
         run: |
           pip install pre-commit
           pre-commit run --all-files
+# TODO: load env variables for testing into GHA
+#      -
+#        name: Run tests
+#        run: |
+#          make test
 
   docker:
     runs-on: ubuntu-latest
