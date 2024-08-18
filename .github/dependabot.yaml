@@ -6,3 +6,12 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+  # Maintain dependencies for Python projects
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: daily
+    groups:
+      python-packages:
+        patterns:
+          - "*"
