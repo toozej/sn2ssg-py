@@ -12,6 +12,7 @@ import requests
 
 SN_HEADER_PATTERN = r"^\|\s*(.*?):\s*(.*?)\s*\|"
 IGNORED_TAGS = [os.environ.get("TAG_TO_DOWNLOAD"), "blog"]
+UNLISTED_TAGS = [item.split(":")[1] for item in os.environ.get("UNLISTED_TAGS").split(",")]
 TITLE_TO_SUMMARY_SUBSTITUTIONS = [
     tuple(item.split(":")) for item in os.environ.get("TITLE_SUBSTITUTIONS").split(",")
 ]
@@ -200,6 +201,13 @@ def _create_ssg_header(
         template = template.replace("{{author}}", author)
         template = template.replace("{{date}}", date)
         template = template.replace("{{slug}}", _convert_title_to_slug(title))
+
+        # Set unlisted to "true" for any note containing an UNLISTED_TAGS
+        for t in UNLISTED_TAGS:
+            if t in tags:
+                template = template.replace("{{unlisted}}", "true")
+            else:
+                template = template.replace("{{unlisted}}", "false")
 
         # don't template the "tag" field with the meta-tag TAG_TO_DOWNLOAD or other IGNORED_TAGS
         for t in IGNORED_TAGS:

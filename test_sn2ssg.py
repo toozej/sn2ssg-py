@@ -210,6 +210,7 @@ def test_create_ssg_header():
 title: {{title}}
 author: {{author}}
 type: post
+unlisted: {{unlisted}}
 date: {{date}}
 url: /{{slug}}/
 summary: {{summary}}
@@ -225,12 +226,54 @@ categories:
         "title: Test Note",
         "author: Author",
         "type: post",
+        "unlisted: false",
         "date: 2023-09-01T02:33:35+00:00",
         "url: /test-note/",
         "summary: ",
         "categories:",
         "  - tag1",
         "  - tag2",
+        "---",
+    ]
+
+    assert header == expected_header
+
+
+def test_create_ssg_header_unlisted():
+    ssg_type = "test"
+    title = "Test Note - Thought"
+    subtitle = "Subtitle"
+    author = "Author"
+    date = "2023-09-01T02:33:35+00:00"
+    tags = ["tag1", "thoughts"]
+
+    template_content = """---
+title: {{title}}
+author: {{author}}
+type: post
+unlisted: {{unlisted}}
+date: {{date}}
+url: /{{slug}}/
+summary: {{summary}}
+categories:
+  - {{tag}}
+---"""
+
+    with patch("builtins.open", mock_open(read_data=template_content)):
+        header = _create_ssg_header(ssg_type, title, subtitle, author, date, tags)
+
+    expected_header = [
+        "---",
+        "title: Test Note - Thought",
+        "author: Author",
+        "type: post",
+        "unlisted: true",
+        "date: 2023-09-01T02:33:35+00:00",
+        "url: /test-note-thought/",
+        "summary: ",
+        "categories:",
+        "  - tag1",
+        "  - thoughts",
         "---",
     ]
 
