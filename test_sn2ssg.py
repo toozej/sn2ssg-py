@@ -96,9 +96,10 @@ def test_send_gotify_notification_no_url_token():
 
 
 def test_send_gotify_notification_with_url_token():
-    with patch.dict(
-        os.environ, {"GOTIFY_URL": "http://fakeurl.com", "GOTIFY_TOKEN": "faketoken"}
-    ), patch("requests.post") as mocked_post:
+    with (
+        patch.dict(os.environ, {"GOTIFY_URL": "http://fakeurl.com", "GOTIFY_TOKEN": "faketoken"}),
+        patch("requests.post") as mocked_post,
+    ):
         _send_gotify_notification("Test Title", "Test Message")
         mocked_post.assert_called_once_with(
             "http://fakeurl.com/message",
@@ -123,15 +124,18 @@ def test_process_note():
         "Content line 2",
     ]
 
-    with patch(
-        "os.environ.get",
-        side_effect=lambda k, v=None: {
-            "AUTHOR": "test_author",
-            "SSG_TYPE": "test_ssg",
-            "OUTPUT_DIR": "/fake/dir",
-        }.get(k, v),
-    ), patch("builtins.print"), patch("builtins.open", mock_open()), patch(
-        "os.path.exists", return_value=False
+    with (
+        patch(
+            "os.environ.get",
+            side_effect=lambda k, v=None: {
+                "AUTHOR": "test_author",
+                "SSG_TYPE": "test_ssg",
+                "OUTPUT_DIR": "/fake/dir",
+            }.get(k, v),
+        ),
+        patch("builtins.print"),
+        patch("builtins.open", mock_open()),
+        patch("os.path.exists", return_value=False),
     ):
         result = _process_note(note)
         assert result == 1

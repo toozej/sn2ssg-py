@@ -4,7 +4,7 @@ minimum_pre_commit_version: "1.15"
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v5.0.0
     hooks:
       - id: check-yaml
         name: Check for valid YAML syntax in repo
@@ -44,7 +44,7 @@ repos:
 
   # Python Linter, Code Style, Error and Complexity Checker, and Formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.5
+    rev: v0.11.12
     hooks:
       - id: ruff
         args: [ "--fix", "--ignore", "E501,E203,E231,E722,C901" ]
@@ -53,19 +53,19 @@ repos:
 
   # Find dead Python code
   - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.11
+    rev: v2.14
     hooks:
       - id: vulture
         args: [ "--min-confidence", "80", "./sn2ssg.py" ]
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
+    rev: 1.8.3
     hooks:
       - id: bandit
         args: ["-iii", "-lll", "-q"]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.17.0
+    rev: v3.20.0
     hooks:
       - id: pyupgrade
         args: ["--py311-plus"]
