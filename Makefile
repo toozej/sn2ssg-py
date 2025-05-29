@@ -32,6 +32,7 @@ test: ## Run tests locally
 		python3 -m venv $(CURDIR)/.venv; \
 		source $(CURDIR)/.venv/bin/activate; \
 		pip3 install -r $(CURDIR)/requirements.txt; \
+		pip3 install pytest; \
 	fi
 	if test -e $(CURDIR)/.env; then \
 		export `cat $(CURDIR)/.env | xargs`; \
