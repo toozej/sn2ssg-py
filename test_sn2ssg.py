@@ -1,5 +1,6 @@
 from unittest.mock import patch, mock_open
 import os
+import subprocess
 
 from sn2ssg import (
     _write_note_file,
@@ -17,7 +18,9 @@ from sn2ssg import (
     _trash_sncli_log,
     _delete_existing_title,
     _delete_existing_header,
-    _validate_dumped_notes_have_tag_to_download,
+    _exponential_backoff_delay,
+    _run_sncli_with_backoff,
+    _validate_dumped_notes_have_tag_to_download_with_backoff,
 )
 
 
@@ -405,11 +408,14 @@ def test_delete_existing_header():
 #                     mocked_print.assert_called_with("Error: Command 'cmd' returned non-zero exit status 1.")
 
 
-def test_validate_dumped_notes_have_tag_to_download():
+def test_validate_dumped_notes_have_tag_to_download_with_backoff():
     tag_to_download = "test-tag"
     input_lines = ["| Title: Note 1 |", "| Tags: test-tag,other-tag |", "Content line 1"]
 
-    assert _validate_dumped_notes_have_tag_to_download(tag_to_download, input_lines) is True
+    assert (
+        _validate_dumped_notes_have_tag_to_download_with_backoff(tag_to_download, input_lines)
+        is False
+    )
 
     input_lines_multiple_notes = [
         "| Title: Note 1 |",
@@ -421,7 +427,9 @@ def test_validate_dumped_notes_have_tag_to_download():
     ]
 
     assert (
-        _validate_dumped_notes_have_tag_to_download(tag_to_download, input_lines_multiple_notes)
+        _validate_dumped_notes_have_tag_to_download_with_backoff(
+            tag_to_download, input_lines_multiple_notes
+        )
         is False
     )
 
@@ -432,7 +440,9 @@ def test_validate_dumped_notes_have_tag_to_download():
     ]
 
     assert (
-        _validate_dumped_notes_have_tag_to_download(tag_to_download, input_lines_without_tag)
+        _validate_dumped_notes_have_tag_to_download_with_backoff(
+            tag_to_download, input_lines_without_tag
+        )
         is False
     )
 
@@ -442,6 +452,80 @@ def test_validate_dumped_notes_have_tag_to_download():
     ]
 
     assert (
-        _validate_dumped_notes_have_tag_to_download(tag_to_download, input_lines_without_tags_line)
+        _validate_dumped_notes_have_tag_to_download_with_backoff(
+            tag_to_download, input_lines_without_tags_line
+        )
         is False
     )
+
+
+def test_exponential_backoff_delay_basic():
+    # Test that delay increases exponentially and is capped
+    delays = [_exponential_backoff_delay(i, base_delay=1.0, max_delay=10.0) for i in range(5)]
+    assert all(delay > 0 for delay in delays)
+    assert delays[0] < delays[1] < delays[2] <= 10.0
+    # Test that delay never exceeds max_delay
+    assert all(delay <= 10.0 for delay in delays)
+    # Test that delay is never less than 0.1
+    assert all(delay >= 0.1 for delay in delays)
+
+
+def test_run_sncli_with_backoff_success(tmp_path):
+    input_filename = str(tmp_path / "sncli_output.txt")
+    tag_to_download = "sometag"
+    with (
+        patch("shutil.which", return_value="/usr/bin/sncli"),
+        patch("subprocess.run") as mock_run,
+        patch("builtins.open", mock_open()),
+    ):
+        mock_run.return_value = None
+        result = _run_sncli_with_backoff(tag_to_download, input_filename)
+        assert result is True
+        mock_run.assert_called()
+
+
+def test_run_sncli_with_backoff_failure(tmp_path):
+    input_filename = str(tmp_path / "sncli_output.txt")
+    tag_to_download = "sometag"
+    with (
+        patch("shutil.which", return_value="/usr/bin/sncli"),
+        patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "cmd")),
+        patch("builtins.open", mock_open()),
+        patch("time.sleep") as mock_sleep,
+    ):
+        result = _run_sncli_with_backoff(tag_to_download, input_filename)
+        assert result is False
+        assert mock_sleep.called
+
+
+def test_validate_dumped_notes_have_tag_to_download_with_backoff_success(tmp_path):
+    input_filename = str(tmp_path / "input.md")
+    tag_to_download = "sometag"
+    file_content = "| Tags: sometag,othertag |\n| Title: Note |\n"
+    with (
+        patch("builtins.open", mock_open(read_data=file_content)),
+        patch("time.sleep") as mock_sleep,
+        patch("sn2ssg._run_sncli_with_backoff", return_value=True),
+    ):
+        result = _validate_dumped_notes_have_tag_to_download_with_backoff(
+            tag_to_download, input_filename
+        )
+        assert result is True
+        mock_sleep.assert_not_called()
+
+
+def test_validate_dumped_notes_have_tag_to_download_with_backoff_failure(tmp_path):
+    input_filename = str(tmp_path / "input.md")
+    tag_to_download = "sometag"
+    # No tags line in file
+    file_content = "| Title: Note |\nContent\n"
+    with (
+        patch("builtins.open", mock_open(read_data=file_content)),
+        patch("time.sleep") as mock_sleep,
+        patch("sn2ssg._run_sncli_with_backoff", return_value=True),
+    ):
+        result = _validate_dumped_notes_have_tag_to_download_with_backoff(
+            tag_to_download, input_filename
+        )
+        assert result is False
+        assert mock_sleep.called

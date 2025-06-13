@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import fnmatch
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -17,8 +18,38 @@ TITLE_TO_SUMMARY_SUBSTITUTIONS = [
     tuple(item.split(":")) for item in os.environ.get("TITLE_SUBSTITUTIONS").split(",")
 ]
 
+# Exponential backoff configuration
+MAX_RETRIES = int(os.environ.get("MAX_RETRIES", 5))
+BASE_DELAY = float(os.environ.get("BASE_DELAY", 1.0))
+MAX_DELAY = float(os.environ.get("MAX_DELAY", 300.0))  # 5 minutes max
 
-def _trash_sncli_log(input_lines: [str]) -> [str]:
+
+def _exponential_backoff_delay(
+    attempt: int, base_delay: float = BASE_DELAY, max_delay: float = MAX_DELAY
+) -> float:
+    """
+    Calculate exponential backoff delay with jitter.
+
+    :param attempt: Current attempt number (0-based)
+    :param base_delay: Base delay in seconds
+    :param max_delay: Maximum delay in seconds
+    :return: Delay in seconds
+    """
+    # Calculate exponential delay: base_delay * (2 ^ attempt)
+    delay = base_delay * (2**attempt)
+
+    # Cap at max_delay
+    delay = min(delay, max_delay)
+
+    # Add jitter (±25% of the delay)
+    jitter = delay * 0.25 * (2 * random.random() - 1)
+    delay += jitter
+
+    # Ensure delay is positive
+    return max(0.1, delay)
+
+
+def _trash_sncli_log(input_lines: list[str]) -> list[str]:
     """
     Filters out Simplenote log entries from the input lines.
 
@@ -41,7 +72,7 @@ def _trash_sncli_log(input_lines: [str]) -> [str]:
     return output_lines
 
 
-def _gather_header_info(pattern: str, note: [str]) -> tuple[str, str, [str]]:
+def _gather_header_info(pattern: str, note: list[str]) -> tuple[str, str, list[str]]:
     """
     Extracts header information (title, date, and tags) from a note.
 
@@ -100,7 +131,7 @@ def _convert_title_to_slug(title: str) -> str:
     return slug
 
 
-def _split_notes(input_lines: [str]) -> [[str]]:
+def _split_notes(input_lines: list[str]) -> [list[str]]:
     """
     Splits the input lines into separate notes using header lines as delimiters.
 
@@ -135,7 +166,7 @@ def _split_notes(input_lines: [str]) -> [[str]]:
     return output_notes
 
 
-def _delete_existing_title(note: [str]) -> [str]:
+def _delete_existing_title(note: list[str]) -> list[str]:
     """
     Removes the title line from a markdown note if it starts with "# "
     since the title will already be part of header, and we don't want to display it twice.
@@ -149,7 +180,7 @@ def _delete_existing_title(note: [str]) -> [str]:
         return note
 
 
-def _delete_existing_header(note: [str]) -> [str]:
+def _delete_existing_header(note: list[str]) -> list[str]:
     """
     Removes "starting" and "middle" header lines from a note.
 
@@ -178,8 +209,8 @@ def _convert_date_format(input_date: str) -> str:
 
 
 def _create_ssg_header(
-    ssg_type: str, title: str, subtitle: str, author: str, date: str, tags: [str]
-) -> [str]:
+    ssg_type: str, title: str, subtitle: str, author: str, date: str, tags: list[str]
+) -> list[str]:
     """
     Creates a static site generator (SSG) header using a template and provided information.
 
@@ -244,7 +275,7 @@ def _create_ssg_header(
     return [x for x in template.split("\n")]
 
 
-def _prepend_ssg_header(new_header: [str], note: [str]) -> [str]:
+def _prepend_ssg_header(new_header: list[str], note: list[str]) -> list[str]:
     """
     Prepends the SSG header to a note.
 
@@ -259,7 +290,7 @@ def _prepend_ssg_header(new_header: [str], note: [str]) -> [str]:
 
 
 def _write_note_file(
-    output_markdown: [str],
+    output_markdown: list[str],
     output_dir: str,
     output_filename: str,
 ):
@@ -330,12 +361,13 @@ def _ensure_num_parsed_notes_matches_outputted_notes(
         print(message)
 
 
-def _run_sncli(tag_to_download: str, input_filename: str):
+def _run_sncli_with_backoff(tag_to_download: str, input_filename: str) -> bool:
     """
-    Executes the sncli command to dump notes with a specified tag to a file.
+    Executes the sncli command to dump notes with a specified tag to a file, with exponential backoff on failures.
 
     :param tag_to_download: String representing the tag to download notes for.
     :param input_filename: String representing the name of the file to write the output to.
+    :return: Boolean indicating success or failure after all retries
     """
     # Define the command as a list of strings
     sncli_binary_path = shutil.which("sncli")
@@ -346,40 +378,123 @@ def _run_sncli(tag_to_download: str, input_filename: str):
 
     command = [sncli_binary_path, "--config=/dev/null", "-r", "dump", tag_to_download]
 
-    # Execute the command
-    try:
-        with open(input_filename, "w") as output:
-            subprocess.run(command, stdout=output, check=True, text=True)
-        print("Dumping of notes via sncli was successful.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
+    for attempt in range(MAX_RETRIES):
+        try:
+            print(f"Attempting to dump notes (attempt {attempt + 1}/{MAX_RETRIES})")
+            with open(input_filename, "w") as output:
+                subprocess.run(command, stdout=output, check=True, text=True)
+            print("Dumping of notes via sncli was successful.")
+            return True
 
+        except subprocess.CalledProcessError as e:
+            print(f"sncli dump attempt {attempt + 1} failed: {e}")
 
-def _validate_dumped_notes_have_tag_to_download(tag_to_download: str, input_lines: [str]) -> bool:
-    """
-    Validates that the dumped notes contain the specified tag.
-    If the dumped notes do not, we need to bail early and alert.
-    This acts as a safety check validation that the sncli's "download tag" functionality works as we need it to.
+            if attempt < MAX_RETRIES - 1:  # Don't sleep on the last attempt
+                delay = _exponential_backoff_delay(attempt)
+                print(f"Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"All {MAX_RETRIES} attempts failed for sncli dump")
+                return False
+        except Exception as e:
+            print(f"Unexpected error during sncli dump attempt {attempt + 1}: {e}")
 
-
-    :param tag_to_download: String representing the tag to validate in the dumped notes.
-    :param input_lines: List of strings, each representing a line from the dumped notes.
-    :return: Boolean indicating whether all the required tags are present in the notes.
-    """
-    found_tags_lines = 0
-    for line in input_lines:
-        if "|" in line and "Tags:" in line:
-            found_tags_lines += 1
-            if tag_to_download not in line:
-                print(f"Did not find required tag {tag_to_download} in note with tags line {line}")
+            if attempt < MAX_RETRIES - 1:
+                delay = _exponential_backoff_delay(attempt)
+                print(f"Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"All {MAX_RETRIES} attempts failed for sncli dump")
                 return False
 
-    # none of our input_lines are valid tags lines, so we need to bail as we
-    # have invalid input_lines
-    if found_tags_lines < 1:
-        print("Did not find required tags line in raw Simplenote dumped notes")
-        return False
-    return True
+    return False
+
+
+def _validate_dumped_notes_have_tag_to_download_with_backoff(
+    tag_to_download: str, input_filename: str
+) -> bool:
+    """
+    Validates that the dumped notes contain the specified tag, with exponential backoff retry logic.
+    If the dumped notes do not, we retry the entire sncli dump and validation process.
+
+    :param tag_to_download: String representing the tag to validate in the dumped notes.
+    :param input_filename: String representing the input file to read and validate.
+    :return: Boolean indicating whether all the required tags are present in the notes after all retries.
+    """
+    for attempt in range(MAX_RETRIES):
+        try:
+            # Read the file content
+            with open(input_filename) as input_file:
+                input_content = input_file.read()
+
+            input_lines = _trash_sncli_log(input_content)
+
+            # Validate the content
+            found_tags_lines = 0
+            validation_failed = False
+
+            for line in input_lines:
+                if "|" in line and "Tags:" in line:
+                    found_tags_lines += 1
+                    if tag_to_download not in line:
+                        print(
+                            f"Did not find required tag {tag_to_download} in note with tags line {line}"
+                        )
+                        validation_failed = True
+                        break
+
+            # Check if we found any tags lines at all
+            if found_tags_lines < 1:
+                print("Did not find required tags line in raw Simplenote dumped notes")
+                validation_failed = True
+
+            if not validation_failed:
+                print(
+                    f"Validation successful: All {found_tags_lines} notes have the required tag '{tag_to_download}'"
+                )
+                return True
+
+            # If validation failed and we have more attempts, retry the entire dump process
+            if attempt < MAX_RETRIES - 1:
+                delay = _exponential_backoff_delay(attempt)
+                print(
+                    f"Validation failed. Re-dumping notes in {delay:.2f} seconds... (attempt {attempt + 2}/{MAX_RETRIES})"
+                )
+                time.sleep(delay)
+
+                # Re-run sncli dump
+                if not _run_sncli_with_backoff(tag_to_download, input_filename):
+                    print(f"Failed to re-dump notes on attempt {attempt + 2}")
+                    continue
+            else:
+                print(f"Validation failed after {MAX_RETRIES} attempts")
+                return False
+
+        except FileNotFoundError:
+            print(f"Input file {input_filename} not found on attempt {attempt + 1}")
+            if attempt < MAX_RETRIES - 1:
+                delay = _exponential_backoff_delay(attempt)
+                print(f"Retrying dump and validation in {delay:.2f} seconds...")
+                time.sleep(delay)
+
+                # Re-run sncli dump
+                if not _run_sncli_with_backoff(tag_to_download, input_filename):
+                    print(f"Failed to dump notes on attempt {attempt + 2}")
+                    continue
+            else:
+                print(f"File not found after {MAX_RETRIES} attempts")
+                return False
+        except Exception as e:
+            print(f"Unexpected error during validation attempt {attempt + 1}: {e}")
+            if attempt < MAX_RETRIES - 1:
+                delay = _exponential_backoff_delay(attempt)
+                print(f"Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+            else:
+                print(f"Validation failed after {MAX_RETRIES} attempts due to errors")
+                return False
+
+    return False
 
 
 def _send_gotify_notification(notification_title: str, notification_text: str):
@@ -400,7 +515,7 @@ def _send_gotify_notification(notification_title: str, notification_text: str):
     print(response.text)
 
 
-def _get_note_header(note: [str]) -> [str]:
+def _get_note_header(note: list[str]) -> list[str]:
     """
     Extracts the header lines from a note.
 
@@ -412,7 +527,7 @@ def _get_note_header(note: [str]) -> [str]:
     ]
 
 
-def _adjust_note_header_title(note_header: [str], title_addition: str) -> [str]:
+def _adjust_note_header_title(note_header: list[str], title_addition: str) -> list[str]:
     """
     Adjust given note_header by appending title_addition to the end of the found Title field within
     note_header
@@ -437,7 +552,7 @@ def _adjust_note_header_title(note_header: [str], title_addition: str) -> [str]:
     return updated_header
 
 
-def _remove_tag_from_note_header(note_header: [str], tag: str, replacement: str) -> [str]:
+def _remove_tag_from_note_header(note_header: list[str], tag: str, replacement: str) -> list[str]:
     """
     removes tag "tag" from "note_header", replacing it with "replacement"
 
@@ -457,7 +572,7 @@ def _remove_tag_from_note_header(note_header: [str], tag: str, replacement: str)
     return updated_header
 
 
-def _split_continuous_note(note: [str]) -> [[str]]:
+def _split_continuous_note(note: list[str]) -> [list[str]]:
     """
     splits up a single continuous note into multiple (one note per line after ssg_header)
 
@@ -488,7 +603,7 @@ def _split_continuous_note(note: [str]) -> [[str]]:
     return notes
 
 
-def _process_note(note: [str]) -> int:
+def _process_note(note: list[str]) -> int:
     """
     Processes a note by gathering header information, converting the date format, creating an SSG header, and writing the note to a file.
 
@@ -524,20 +639,29 @@ def main():
 
     # get raw notes from Simplenote
     input_filename = f"{os.environ.get('INPUT_DIR')}/sn_dump.md"
-    _run_sncli(os.environ.get("TAG_TO_DOWNLOAD"), input_filename)
-    with open(input_filename) as input_file:
-        input_lines = input_file.read()
-    input_lines = _trash_sncli_log(input_lines)
 
-    # validate all raw notes from Simplenote are the ones with TAG_TO_DOWNLOAD in them
-    if not _validate_dumped_notes_have_tag_to_download(
-        os.environ.get("TAG_TO_DOWNLOAD"), input_lines
-    ):
+    # First attempt to dump notes
+    if not _run_sncli_with_backoff(os.environ.get("TAG_TO_DOWNLOAD"), input_filename):
         title = "sn2ssg FATAL error"
-        message = f"FATAL: Bailing early since dumped notes from Simplenote don't all have the {os.environ.get('TAG_TO_DOWNLOAD')} tag"
+        message = f"FATAL: Failed to dump notes after {MAX_RETRIES} attempts"
         print(message)
         _send_gotify_notification(title, message)
         sys.exit(1)
+
+    # Validate all raw notes from Simplenote with exponential backoff
+    if not _validate_dumped_notes_have_tag_to_download_with_backoff(
+        os.environ.get("TAG_TO_DOWNLOAD"), input_filename
+    ):
+        title = "sn2ssg FATAL error"
+        message = f"FATAL: Bailing early since dumped notes from Simplenote don't all have the {os.environ.get('TAG_TO_DOWNLOAD')} tag after {MAX_RETRIES} attempts"
+        print(message)
+        _send_gotify_notification(title, message)
+        sys.exit(1)
+
+    # Read the validated file
+    with open(input_filename) as input_file:
+        input_lines = input_file.read()
+    input_lines = _trash_sncli_log(input_lines)
 
     # split raw notes and process them
     notes = _split_notes(input_lines)
