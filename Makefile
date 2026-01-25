@@ -60,6 +60,8 @@ update-requirements: ## Update Python requirements
 pre-commit: pre-commit-install pre-commit-run ## Install and run pre-commit hooks
 
 pre-commit-install: ## Install pre-commit hooks and necessary binaries
+	# actionlint
+	command -v actionlint || brew install actionlint || go install github.com/rhysd/actionlint/cmd/actionlint@latest
 	# install and update pre-commits
 	pre-commit install
 	pre-commit autoupdate

@@ -1,10 +1,10 @@
 ---
-default_language_version: {python: python3.11}
+#default_language_version: {python: python3.11}
 minimum_pre_commit_version: "1.15"
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         name: Check for valid YAML syntax in repo
@@ -42,9 +42,15 @@ repos:
       - id: check-hooks-apply
       - id: check-useless-excludes
 
+  # lint GitHub Actions workflows
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
+
   # Python Linter, Code Style, Error and Complexity Checker, and Formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+    rev: v0.14.14
     hooks:
       - id: ruff
         args: [ "--fix", "--ignore", "E501,E203,E231,E722,C901" ]
@@ -59,13 +65,13 @@ repos:
         args: [ "--min-confidence", "80", "./sn2ssg.py" ]
 
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.3
+    rev: 1.9.3
     hooks:
       - id: bandit
         args: ["-iii", "-lll", "-q"]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
         args: ["--py311-plus"]
